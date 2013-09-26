@@ -3,7 +3,7 @@ Summary:    telephony plugin library for AT communication with IMC modem
 Version:    0.1.4
 Release:    1
 Group:      System/Libraries
-License:    Apache
+License:    Apache-2.0
 Source0:    tel-plugin-imcmodem-%{version}.tar.gz
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
@@ -30,9 +30,10 @@ make %{?jobs:-j%jobs}
 %install
 %make_install
 mkdir -p %{buildroot}/usr/share/license
+cp LICENSE %{buildroot}/usr/share/license/%{name}
 
 %files
 %manifest tel-plugin-imcmodem.manifest
 %defattr(-,root,root,-)
 %{_libdir}/telephony/plugins/*
-/usr/share/license/tel-plugin-imcmodem
+/usr/share/license/%{name}
