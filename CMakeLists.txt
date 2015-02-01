@@ -23,16 +23,17 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include/)
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wdeclaration-after-statement -Wmissing-declarations -Wredundant-decls -Wcast-align")
 
 
-ADD_DEFINITIONS("-DFEATURE_DLOG_DEBUG")
+ADD_DEFINITIONS("-DFEATURE_TLOG_DEBUG")
 ADD_DEFINITIONS("-DTCORE_LOG_TAG=\"IMCMODEM\"")
 
 MESSAGE(${CMAKE_C_FLAGS})
 MESSAGE(${CMAKE_EXE_LINKER_FLAGS})
 
 SET(SRCS
-		src/desc-imcmodem.c
-		src/vnet.c
-		src/config.c
+	src/desc-imcmodem.c
+	src/imcmodem.c
+	src/vnet.c
+	src/config.c
 )
 
 

@@ -37,23 +37,26 @@
 #include <at.h>
 #include <mux.h>
 
+#include "imcmodem.h"
 #include "config.h"
 
-#define IMC_MODEM_PLUGIN_NAME				"imc-plugin.so"
+#define IMC_MODEM_PLUGIN_NAME		"imc-plugin.so"
 
-#define IMC_CMUX_MAX_CHANNELS				7
-#define IMC_CMUX_MAX_BUFFER_SIZE			2048
+#define IMC_CMUX_MAX_CHANNELS		7
+#define IMC_CMUX_MAX_BUFFER_SIZE		2048
 
 /* CP States */
-#define IMC_AT_CPAS_RESULT_READY			0
-#define IMC_AT_CPAS_RESULT_UNAVAIL			1
-#define IMC_AT_CPAS_RESULT_UNKNOWN			2
-#define IMC_AT_CPAS_RESULT_RINGING			3
+#define IMC_AT_CPAS_RESULT_READY		0
+#define IMC_AT_CPAS_RESULT_UNAVAIL		1
+#define IMC_AT_CPAS_RESULT_UNKNOWN		2
+#define IMC_AT_CPAS_RESULT_RINGING		3
 #define IMC_AT_CPAS_RESULT_CALL_PROGRESS	4
-#define IMC_AT_CPAS_RESULT_ASLEEP			5
+#define IMC_AT_CPAS_RESULT_ASLEEP		5
 
 /* Maximum Core objects per Logical HAL (indirectly per Channel) */
 #define MAX_CORE_OBJECTS_PER_CHANNEL		3
+
+#define IMCMODEM_AT_CMD_XTRACE_ENABLE	"at+xsystrace=1,\"digrf=1;bb_sw=1;3g_sw=1\",\"digrf=0x84\",\"oct=4\";+xsystrace=11;+trace=1"
 
 /*
  * List of supported Core Object types
@@ -96,7 +99,7 @@ static gboolean _check_cp_poweron(TcoreHal *hal);
 static void _send_enable_logging_command(TcoreHal *hal);
 
 static void _on_confirmation_send_message(TcorePending *pending,
-									gboolean result, void *user_data)
+	gboolean result, void *user_data)
 {
 	dbg("Message send confirmation");
 
@@ -106,20 +109,37 @@ static void _on_confirmation_send_message(TcorePending *pending,
 		dbg("SEND OK");
 	}
 }
-static void _assign_objects_to_hal(int channel_id, TcoreHal *hal)
+static void _assign_objects_to_hal(int channel_id, TcoreHal *hal, TcoreHal *phy_hal)
 {
-	TcorePlugin *plugin;
+	ImcmodemCustomData *custom_data;
+	TcoreModem *modem;
 	gboolean ret;
 	int i;
 
-	plugin = tcore_hal_ref_plugin(hal);
+	if (hal == NULL) {
+		err("HAL is NULL");
+		return;
+	}
+
+	if (phy_hal == NULL) {
+		err("Physical HAL is NULL");
+		return;
+	}
+
+	custom_data = tcore_hal_ref_user_data(phy_hal);
+	if (custom_data == NULL) {
+		err("custom_data is NULL");
+		return;
+	}
+
+	modem = custom_data->modem;
 
 	for (i = 0 ; i < MAX_CORE_OBJECTS_PER_CHANNEL ; i++) {
 		if (supported_modules[channel_id][i] == 0)
 			continue;
 
 		/* Add Core Object type for specific 'hal' */
-		ret = tcore_server_add_cp_mapping_tbl_entry(plugin,
+		ret = tcore_server_add_cp_mapping_tbl_entry(modem,
 				supported_modules[channel_id][i], hal);
 		if (ret == TRUE) {
 			dbg("Core Object Type: [0x%x] - Success");
@@ -131,33 +151,45 @@ static void _assign_objects_to_hal(int channel_id, TcoreHal *hal)
 
 static void _on_cmux_setup_complete(gpointer user_data)
 {
+	Server *s;
 	TcoreHal *hal = user_data;
-	TcorePlugin *plugin;
+	ImcmodemCustomData *custom_data;
+	unsigned int slot_cnt = 1;
+
 	dbg("MUX Setup - COMPLETE");
 
-	if (user_data == NULL)
+	if (hal == NULL) {
+		err("HAL is NULL");
 		return;
+	}
 
-	plugin = tcore_hal_ref_plugin(hal);
+	custom_data = tcore_hal_ref_user_data(hal);
+	if (custom_data == NULL) {
+		err("custom_data is NULL");
+		return;
+	}
 
-	/* Print all the HALs and Core Objects for the Plug-in */
-	tcore_server_print_modems(plugin);
+	s = tcore_plugin_ref_server(tcore_hal_ref_plugin(hal));
 
 	/* Load Modem Plug-in */
-	tcore_server_load_modem_plugin(tcore_plugin_ref_server(plugin),
-							plugin, IMC_MODEM_PLUGIN_NAME);
+	tcore_server_load_modem_plugin(s,
+		custom_data->modem, IMC_MODEM_PLUGIN_NAME);
+	dbg("Modem plug-in loaded");
+
+	tcore_server_send_notification(s, NULL,
+			TNOTI_SERVER_ADDED_MODEM_PLUGIN_COMPLETED,
+			sizeof(slot_cnt), &slot_cnt);
 }
 
-static void _on_cmux_channel_setup(int channel_id, TcoreHal *hal,
-									gpointer user_data)
+static void _on_cmux_channel_setup(int channel_id,
+	TcoreHal *hal, gpointer user_data)
 {
 	TcorePlugin *plugin;
 	TcoreHal *phy_hal;
 	if ((hal == NULL) || (user_data == NULL))
 		return;
 
-	if ((channel_id == 0)
-			|| (channel_id > IMC_CMUX_MAX_CHANNELS)) {
+	if ((channel_id == 0) || (channel_id > IMC_CMUX_MAX_CHANNELS)) {
 		err("Control Channel");
 		return;
 	}
@@ -168,7 +200,7 @@ static void _on_cmux_channel_setup(int channel_id, TcoreHal *hal,
 	dbg("Channel ID: [%d] Logical HAL: [0x%x]", channel_id, hal);
 
 	/* Assign specifc Core Object types to the Logical HAL (CMUX Channel) */
-	_assign_objects_to_hal(channel_id, hal);
+	_assign_objects_to_hal(channel_id, hal, phy_hal);
 
 	/* Set HAL state to Power ON (TRUE) */
 	tcore_hal_set_power_state(hal, TRUE);
@@ -176,36 +208,34 @@ static void _on_cmux_channel_setup(int channel_id, TcoreHal *hal,
 }
 
 static void _on_response_cmux_init(TcorePending *p, int data_len,
-										const void *data, void *user_data)
+	const void *data, void *user_data)
 {
 	const TcoreATResponse *resp = data;
 	TcoreHal *hal = user_data;
-	TReturn ret;
 
-	if ((resp != NULL)
-			&& resp->success) {
+	if ((resp != NULL) && resp->success) {
+		TReturn ret;
 		dbg("Initialize CMUX - [OK]");
 
 		/* Setup Internal CMUX */
 		ret = tcore_cmux_setup_internal_mux(CMUX_MODE_BASIC,
-							IMC_CMUX_MAX_CHANNELS,
-							IMC_CMUX_MAX_BUFFER_SIZE, hal,
-							_on_cmux_channel_setup, hal,
-							_on_cmux_setup_complete, hal);
+					IMC_CMUX_MAX_CHANNELS,
+					IMC_CMUX_MAX_BUFFER_SIZE, hal,
+					_on_cmux_channel_setup, hal,
+					_on_cmux_setup_complete, hal);
 	} else {
 		err("Initialize CMUX - [NOK]");
 	}
 }
 
 static void _on_response_enable_logging(TcorePending *p,
-					int data_len, const void *data, void *user_data)
+	int data_len, const void *data, void *user_data)
 {
 	const TcoreATResponse *resp = data;
 	TcoreHal *hal = user_data;
 	TReturn ret;
 
-	if ((resp != NULL)
-			&& resp->success) {
+	if ((resp != NULL) && resp->success) {
 		dbg("Enable CP logging - [OK]");
 	} else {
 		err("Enable CP logging - [NOK]");
@@ -239,7 +269,7 @@ static void _on_timeout_check_cp_poweron(TcorePending *p, void *user_data)
 }
 
 static void _on_response_check_cp_poweron(TcorePending *pending,
-					int data_len, const void *data, void *user_data)
+	int data_len, const void *data, void *user_data)
 {
 	const TcoreATResponse *resp = data;
 	TcoreHal *hal = user_data;
@@ -313,12 +343,11 @@ static void _send_enable_logging_command(TcoreHal *hal)
 	pending = tcore_pending_new(NULL, 0);
 
 	/* Create AT Request */
-	at_req = tcore_at_request_new("at+xsystrace=1,\"digrf=1;bb_sw=1;3g_sw=1\",\"digrf=0x84\",\"oct=4\";+xsystrace=11;+trace=1",
-							NULL, TCORE_AT_NO_RESULT);
-
+	at_req = tcore_at_request_new(IMCMODEM_AT_CMD_XTRACE_ENABLE,
+					NULL, TCORE_AT_NO_RESULT);
 
 	dbg("AT-Command: [%s] Prefix(if any): [%s] Command length: [%d]",
-						at_req->cmd, at_req->prefix, strlen(at_req->cmd));
+		at_req->cmd, at_req->prefix, strlen(at_req->cmd));
 
 	/* Set request data and register Response and Send callbacks */
 	tcore_pending_set_request_data(pending, 0, at_req);
@@ -327,6 +356,9 @@ static void _send_enable_logging_command(TcoreHal *hal)
 
 	/* Send command to CP */
 	if (tcore_hal_send_request(hal, pending) != TCORE_RETURN_SUCCESS) {
+		tcore_pending_free(pending);
+		tcore_at_free(at_req);
+
 		err("Failed to send Trace logging command");
 	} else {
 		dbg("Successfully sent Trace logging command");
@@ -345,7 +377,7 @@ static gboolean _check_cp_poweron(TcoreHal *hal)
 	at_req = tcore_at_request_new("AT+CPAS", "+CPAS:", TCORE_AT_SINGLELINE);
 
 	dbg("AT-Command: [%s] Prefix(if any): [%s] Command length: [%d]",
-					at_req->cmd, at_req->prefix, strlen(at_req->cmd));
+		at_req->cmd, at_req->prefix, strlen(at_req->cmd));
 
 	tcore_pending_set_priority(pending, TCORE_PENDING_PRIORITY_DEFAULT);
 
@@ -360,6 +392,9 @@ static gboolean _check_cp_poweron(TcoreHal *hal)
 
 	/* Send command to CP */
 	if (tcore_hal_send_request(hal, pending) != TCORE_RETURN_SUCCESS) {
+		tcore_pending_free(pending);
+		tcore_at_free(at_req);
+
 		err("Failed to send CPAS");
 		return FALSE;
 	} else {

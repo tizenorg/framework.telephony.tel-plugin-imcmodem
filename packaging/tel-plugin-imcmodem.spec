@@ -1,6 +1,6 @@
 Name:       tel-plugin-imcmodem
 Summary:    telephony plugin library for AT communication with IMC modem
-Version:    0.1.4
+Version:    0.1.10
 Release:    1
 Group:      System/Libraries
 License:    Apache-2.0

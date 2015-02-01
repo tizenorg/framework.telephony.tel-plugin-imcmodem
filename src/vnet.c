@@ -46,8 +46,7 @@
 #ifndef __USE_GNU
 #define __USE_GNU
 #endif
-
-#define MODEM_IMAGE_PATH		"/boot/modem.bin"
+#define MODEM_IMAGE_PATH		"/opt/modem/modem.bin"
 #define NV_DIR_PATH				"/csa/nv"
 #define NV_FILE_PATH			NV_DIR_PATH"/nvdata.bin"
 
@@ -137,17 +136,19 @@ int vnet_ipc0_open()
 
 	/* Track the state of CP */
 	state = vnet_get_cp_state(fd);
+	close (fd);
+
 	dbg("CP State: [%d]", state);
 	if (state != VNET_CP_STATE_ONLINE) {
 		err("CP is NOT yet Online!!!");
 		return -1;
-	} else {
-		/* Opening AP-CP Control communication device */
-		fd = open(VNET_CH_PATH_IPC0, O_RDWR);
-		if (fd < 0) {
-			err("Failed to Open [%s] Error: [%s]", VNET_CH_PATH_IPC0, strerror(errno));
-			return -1;
-		}
+	}
+
+	/* Opening AP-CP Control communication device */
+	fd = open(VNET_CH_PATH_IPC0, O_RDWR);
+	if (fd < 0) {
+		err("Failed to Open [%s] Error: [%s]", VNET_CH_PATH_IPC0, strerror(errno));
+		return -1;
 	}
 
 	return fd;
