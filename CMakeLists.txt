@@ -6,7 +6,7 @@ SET(PREFIX ${CMAKE_INSTALL_PREFIX})
 SET(EXEC_PREFIX "\${prefix}")
 SET(LIBDIR "\${prefix}/lib")
 SET(INCLUDEDIR "\${prefix}/include")
-SET(PKGCONFIGDIR "${PREFIX}/lib/pkgconfig" CACHE PATH PKGCONFIGDIR)
+SET(PKGCONFIGDIR "${PREFIX}/${LIB_INSTALL_DIR}/pkgconfig" CACHE PATH PKGCONFIGDIR)
 SET(CMAKE_INSTALL_PREFIX "${PREFIX}")
 
 # Set required packages
@@ -23,15 +23,17 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include/)
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wdeclaration-after-statement -Wmissing-declarations -Wredundant-decls -Wcast-align")
 
 
-ADD_DEFINITIONS("-DFEATURE_DLOG_DEBUG")
+ADD_DEFINITIONS("-DFEATURE_TLOG_DEBUG")
 ADD_DEFINITIONS("-DTCORE_LOG_TAG=\"IMCMODEM\"")
 
 MESSAGE(${CMAKE_C_FLAGS})
 MESSAGE(${CMAKE_EXE_LINKER_FLAGS})
 
 SET(SRCS
-		src/desc-imcmodem.c
-		src/vnet.c
+	src/desc-imcmodem.c
+	src/imcmodem.c
+	src/vnet.c
+	src/config.c
 )
 
 
@@ -44,4 +46,5 @@ SET_TARGET_PROPERTIES(imcmodem-plugin PROPERTIES PREFIX "" OUTPUT_NAME imcmodem-
 
 # install
 INSTALL(TARGETS imcmodem-plugin
-		LIBRARY DESTINATION lib/telephony/plugins)
+	LIBRARY DESTINATION ${LIB_INSTALL_DIR}/telephony/plugins)
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/LICENSE DESTINATION /usr/share/license RENAME tel-plugin-imcmodem)

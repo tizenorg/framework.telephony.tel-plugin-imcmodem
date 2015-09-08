@@ -1,17 +1,26 @@
-#sbs-git:slp/pkgs/t/tel-plugin-imcmodem
-Name:       tel-plugin-imcmodem
-Summary:    telephony plugin library for AT communication with IMC modem
-Version:    0.1.2
-Release:    1
-Group:      System/Libraries
-License:    Apache
-Source0:    tel-plugin-imcmodem-%{version}.tar.gz
-Requires(post): /sbin/ldconfig
+%define major 0
+%define minor 1
+%define patchlevel 11
+
+Name:             tel-plugin-imcmodem
+Version:          %{major}.%{minor}.%{patchlevel}
+Release:          1
+License:          Apache-2.0
+Summary:          telephony plugin library for AT communication with IMC modem
+Group:            System/Libraries
+Source0:          tel-plugin-imcmodem-%{version}.tar.gz
+
+%if "%{?tizen_profile_name}" == "mobile" && "%{_repository}" == "target"
+%else
+ExcludeArch: %{arm} %ix86 x86_64
+%endif
+
+BuildRequires:    cmake
+BuildRequires:    pkgconfig(glib-2.0)
+BuildRequires:    pkgconfig(dlog)
+BuildRequires:    pkgconfig(tcore)
+Requires(post):   /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
-BuildRequires:  cmake
-BuildRequires:  pkgconfig(glib-2.0)
-BuildRequires:  pkgconfig(dlog)
-BuildRequires:  pkgconfig(tcore)
 
 %description
 imcmodem plugin for telephony
@@ -20,8 +29,8 @@ imcmodem plugin for telephony
 %setup -q
 
 %build
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix}
-make %{?jobs:-j%jobs}
+%cmake .
+make %{?_smp_mflags}
 
 %post
 /sbin/ldconfig
@@ -29,10 +38,12 @@ make %{?jobs:-j%jobs}
 %postun -p /sbin/ldconfig
 
 %install
-rm -rf %{buildroot}
 %make_install
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE %{buildroot}/usr/share/license/%{name}
 
 %files
+%manifest tel-plugin-imcmodem.manifest
 %defattr(-,root,root,-)
-#%doc COPYING
 %{_libdir}/telephony/plugins/*
+/usr/share/license/%{name}
